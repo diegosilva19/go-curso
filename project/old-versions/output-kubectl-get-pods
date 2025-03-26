@@ -1,0 +1,7 @@
+coredns-5dd5756b68-hzgbt
+etcd-minikube
+kube-apiserver-minikube
+kube-controller-manager-minikube
+kube-proxy-l6gsk
+kube-scheduler-minikube
+storage-provisioner

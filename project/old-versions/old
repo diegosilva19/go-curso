@@ -1,0 +1,93 @@
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"os/exec"
+	"sync"
+	"time"
+)
+
+// Each command will have a corresponding output file.
+// Adjust these to suit your needs.
+var commandsToFiles = map[string]string{
+	"ls -l /var/www": "output_ls_var_www.txt",
+	"ls -l /private/var/www/go-lang-basic/project":               "output_ls_golang_project.txt",
+	"cd /private/var/www/go-lang-basic/project && ./infinite.sh": "output_infinite.txt",
+}
+
+func main() {
+	// WaitGroup to track all commands
+
+	listen()
+
+}
+
+func listen() {
+	var wg sync.WaitGroup
+
+	// Start one goroutine per command
+	for cmd, fileName := range commandsToFiles {
+		wg.Add(1)
+		go startCommand(cmd, fileName, &wg)
+	}
+
+	// Wait for all commands to finish (or press Ctrl+C if a command is infinite)
+	wg.Wait()
+	fmt.Println("All commands have finished (or program was terminated).")
+}
+
+// startCommand runs a single shell command and writes its stdout to a separate file
+func startCommand(cmdStr, outFilename string, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	// Prepare the command
+	cmd := exec.Command("bash", "-c", cmdStr)
+
+	// Create a pipe for the command's standard output
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		fmt.Printf("Error creating StdoutPipe for '%s': %v\n", cmdStr, err)
+		return
+	}
+
+	// Start the command
+	if err := cmd.Start(); err != nil {
+		fmt.Printf("Error starting command '%s': %v\n", cmdStr, err)
+		return
+	}
+
+	// Open or create the output file in append mode
+	file, err := os.OpenFile(outFilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("Failed to open file for '%s': %v\n", cmdStr, err)
+		return
+	}
+	defer file.Close()
+
+	writer := bufio.NewWriter(file)
+
+	// Read all lines from stdout, write each line to the file, flush each time
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
+		line := scanner.Text()
+		timestamp := time.Now().Format(time.RFC3339)
+		_, err := writer.WriteString(fmt.Sprintf("[%s] %s\n", timestamp, line))
+		if err != nil {
+			fmt.Printf("Error writing to file for '%s': %v\n", cmdStr, err)
+		}
+		if flushErr := writer.Flush(); flushErr != nil {
+			fmt.Printf("Error flushing writer for '%s': %v\n", cmdStr, flushErr)
+		}
+	}
+	// Check if there was an error reading stdout
+	if scanErr := scanner.Err(); scanErr != nil {
+		fmt.Printf("Error reading output for '%s': %v\n", cmdStr, scanErr)
+	}
+
+	// Wait for the command to actually complete (unless it's infinite)
+	if waitErr := cmd.Wait(); waitErr != nil {
+		fmt.Printf("Error waiting for command '%s' to finish: %v\n", cmdStr, waitErr)
+	}
+}

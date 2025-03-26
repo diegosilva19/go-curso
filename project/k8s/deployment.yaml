@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: command-executor
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+      - name: command-executor
+        image: command-executor:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        - name: WRITE_DIR
+          value: "/var/log/commands"
+        - name: MAX_CONCURRENCY
+          value: "100"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+        volumeMounts:
+        - name: command-logs
+          mountPath: /var/log/commands
+      volumes:
+      - name: command-logs
+        persistentVolumeClaim:
+          claimName: command-logs-pvc

@@ -10,20 +10,18 @@ import (
 )
 
 type KubePod struct {
-	Name          string
-	Namespace     string
-	AppName       string
-	DeployVersion string
-	PodNameHash   string
+	Name          string `json:"-"`
+	Namespace     string `json:"-"`
+	ClusterName   string `json:"-"`
+	AppName       string `json:"-"`
+	DeployVersion string `json:"-"`
+	PodNameHash   string `json:"-"`
 	LogCommandStr string `json:"command"`
 	WriteFile     string `json:"write_file"`
 }
 
-/*
-{namespace: "default", separatedFile: true}
-*/
-
 type RequestBodyList struct {
+	ClusterName   string `json:"cluster_name"`
 	NameSpace     string "json:namespace"
 	LogDir        string `json:"log_dir"`
 	SeparatedFile bool   `json:"separated_file"`
@@ -39,12 +37,12 @@ func CreateList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var responses []KubePod
-	for _, itemList := range payload {
 
+	for _, itemList := range payload {
+		clusterName := itemList.ClusterName
 		namespace := itemList.NameSpace
 
-		//cmdStr := "kubectl get pods -n " + namespace + " -o json | jq -r '.items[] | select(.metadata.name | contains(\"" + namespace + "\")) | .metadata.name'"
-		cmdStr := "cat old-versions/output-kubectl-get-pods"
+		cmdStr := "kubectx " + itemList.ClusterName + " && kubectl get pods -n " + namespace + " -o json | jq -r '.items[] | select(.metadata.name | contains(\"" + namespace + "\")) | .metadata.name'"
 		cmd := exec.Command("bash", "-c", cmdStr)
 		stdout, err := cmd.StdoutPipe()
 
@@ -62,12 +60,9 @@ func CreateList(w http.ResponseWriter, r *http.Request) {
 		for scanner.Scan() {
 			line := scanner.Text()
 
-			//coredns-5dd5756b68-hzgbt
 			partsPodName := strings.Split(line, "-")
 
 			if len(partsPodName) == 3 {
-				fmt.Println("line: ..........................")
-				fmt.Println(line + ": ..........................")
 
 				appName := partsPodName[0]
 				deployVersion := partsPodName[1]
@@ -76,6 +71,7 @@ func CreateList(w http.ResponseWriter, r *http.Request) {
 				podInfo := KubePod{
 					Namespace:     namespace,
 					AppName:       appName,
+					ClusterName:   clusterName,
 					DeployVersion: deployVersion,
 					PodNameHash:   podNameHash,
 					LogCommandStr: "kubectl logs -f " + line,
@@ -103,8 +99,4 @@ func CreateList(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
 	}
 
-}
-
-func parse() {
-	// Implementation goes here
 }
